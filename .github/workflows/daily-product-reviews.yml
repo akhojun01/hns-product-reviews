@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   collect:
-    runs-on: ubuntu-24.04
+    runs-on: windows-2025
     timeout-minutes: 20
     permissions:
       contents: write
@@ -40,6 +40,7 @@ jobs:
       - name: Collect public reviews for the previous day
         env:
           REVIEW_DAY: ${{ inputs.day }}
+        shell: bash
         run: |
           node collect-day.mjs "$REVIEW_DAY"
           git config user.name 'github-actions[bot]'
@@ -51,6 +52,7 @@ jobs:
           fi
       - uses: actions/configure-pages@v5
       - name: Prepare public files
+        shell: bash
         run: |
           mkdir -p public
           cp index.html style.css app.mjs stats.mjs shops.mjs dates.mjs data.json public/
