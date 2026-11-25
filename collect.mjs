@@ -8,11 +8,15 @@ const maxProducts = 30;
 const maxReviewPages = 20;
 
 function findPublicLinks() {
-  return [...document.querySelectorAll('a[href]')].map(anchor => anchor.href).slice(0,4000);
+  return {
+    url:location.href,
+    title:document.title.slice(0,120),
+    links:[...document.querySelectorAll('a[href]')].map(anchor => anchor.href).slice(0,4000),
+  };
 }
 
 export function readProduct() {
-  const out = {url:location.href, title:'', category:'', reviews:[], empty:false};
+  const out = {url:location.href, pageTitle:document.title.slice(0,120), title:'', category:'', reviews:[], empty:false};
   const structured = [];
   function visit(value, depth = 0) {
     if (!value || typeof value !== 'object' || depth > 7) return;
@@ -140,19 +144,19 @@ function reviewEntries(snap, salt) {
 
 async function inspectProduct(page, link, shop, remember, salt, targetDay) {
   await page.navigate(link.url);
-  await pause(1250);
-  let snap = await page.inspect(readProduct);
-  if (snap.url === 'about:blank') {
-    await pause(400);
+  let snap;
+  let source;
+  for (let attempt=0; attempt<7; attempt++) {
+    await pause(attempt ? 900 : 1800);
     snap = await page.inspect(readProduct);
-    if (snap.url === 'about:blank') throw new Error('상품 페이지를 열지 못했습니다.');
+    source = productLink(snap.url,shop);
+    if (source && (!link.id || link.id===source.id) && snap.title) break;
   }
-  let source = productLink(snap.url,shop) || productLink(link.url,shop);
-  const host = new URL(snap.url).hostname;
-  if (!source || host !== shop.host && !host.endsWith('.' + shop.host)) throw new Error('공식 상품 주소 확인 실패');
-  for (let attempt=0; attempt<3; attempt++) {
+  if (!source || link.id && source.id!==link.id)
+    throw new Error('공식 상품 주소 확인 실패 (' + (snap.pageTitle || '제목 없음') + ')');
+  for (let attempt=0; attempt<5; attempt++) {
     if (await page.inspect(clickReviewControl,'tab')) break;
-    await pause(600);
+    await pause(800);
   }
   await pause(750);
   let latest = await page.inspect(clickReviewControl,'latest');
@@ -164,6 +168,12 @@ async function inspectProduct(page, link, shop, remember, salt, targetDay) {
   let entries = {};
   for (let step=0; step<maxReviewPages; step++) {
     snap = await page.inspect(readProduct);
+    if (step===0 && !snap.reviews.length && !snap.empty) {
+      for (let retry=0; retry<3 && !snap.reviews.length && !snap.empty; retry++) {
+        await pause(800);
+        snap = await page.inspect(readProduct);
+      }
+    }
     const newEntries = reviewEntries(snap,salt);
     const added = Object.keys(newEntries).some(key=>!Object.hasOwn(entries,key));
     Object.assign(entries,newEntries);
@@ -173,7 +183,10 @@ async function inspectProduct(page, link, shop, remember, salt, targetDay) {
     await pause(750);
   }
   const count = Object.keys(entries).length;
-  if (!count && !snap.empty) return 'unreadable';
+  if (!count && !snap.empty) {
+    console.log(shop.name + ' 상품평 등록일 없음: ' + (snap.pageTitle || '제목 없음'));
+    return 'unreadable';
+  }
   const name = snap.title.trim().slice(0,200) || '상품 ' + source.id.split(':')[1];
   const category = snap.category.trim().slice(0,80) || '미분류';
   remember(source,{name,category,entries});
@@ -199,12 +212,16 @@ export async function collect(store, save, report, targetDay) {
       try {
         await page.navigate(shop.home);
         await pause(1700);
-        const linksFromHome = await page.inspect(findPublicLinks);
-        for (const url of linksFromHome) {
+        const discovery = await page.inspect(findPublicLinks);
+        for (const url of discovery.links) {
           const link = productLink(url,shop);
           if (link) links.set(link.id,link);
         }
-      } catch { run.discoveryFailed = true; }
+        console.log(shop.name + ' 공개 목록: ' + discovery.links.length + '개 링크 / ' + links.size + '개 대상 (' + discovery.title + ')');
+      } catch (error) {
+        run.discoveryFailed = true;
+        console.log(shop.name + ' 공개 목록 접속 실패: ' + error.message);
+      }
       const list = [...links.values()];
       if (!list.length) run.discoveryFailed = true;
       const pinnedCount = Math.min(shop.seeds.length + Math.min(manual.length,2),Math.floor(maxProducts/2));
@@ -225,7 +242,10 @@ export async function collect(store, save, report, targetDay) {
               reviews:{...previous?.reviews,...entries},checkedAt:new Date().toISOString()};
           },store.salt,targetDay);
           run[result]++;
-        } catch { run.failures++; }
+        } catch (error) {
+          run.failures++;
+          if (run.failures<=3) console.log(shop.name + ' 상품 접속 실패: ' + error.message);
+        }
       }
     } finally {
       await page.close();

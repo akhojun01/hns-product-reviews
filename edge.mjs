@@ -26,10 +26,10 @@ export async function openEdge() {
   }
   child.on('error',error=>{startupError=error;rejectPending(error);});
   child.on('exit',()=>rejectPending(new Error('Edge 연결이 종료됐습니다.')));
-  function call(method,params = {},sessionId) {
+  function call(method,params = {},sessionId,timeout = 12_000) {
     const id = ++counter;
     return new Promise((resolve,reject)=>{
-      const timer = setTimeout(()=>reject(new Error('Edge 응답 시간 초과')),12_000);
+      const timer = setTimeout(()=>reject(new Error(method + ' 응답 시간 초과')),timeout);
       pending.set(id,{resolve,reject,timer});
       socket.send(JSON.stringify({id,method,params,sessionId}));
     }).finally(()=>{
@@ -86,8 +86,8 @@ export async function openEdge() {
       await send('Page.enable');
       return {
         async navigate(url) {
-          const result = await send('Page.navigate',{url});
-          if (result.errorText) throw new Error('상품 페이지 접속 실패');
+          const result = await call('Page.navigate',{url},sessionId,30_000);
+          if (result.errorText) throw new Error('상품 페이지 접속 실패 ' + result.errorText);
         },
         async inspect(fn,arg = null) {
           const {result,exceptionDetails} = await send('Runtime.evaluate',{
