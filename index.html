@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="홈쇼핑 7개사의 공개 상품평을 등록일 기준으로 조회합니다.">
+  <title>홈쇼핑 상품평 모음</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#all">
+        <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19V12m7 7V5m7 14V9"/></svg></span>
+        <span>홈쇼핑 상품평 모음</span>
+      </a>
+      <div class="actions">
+        <button type="button" class="secondary" id="refresh">새로고침</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <nav id="tabs" aria-label="홈쇼핑사 선택"></nav>
+    <section class="intro">
+      <div><h1 id="title" tabindex="-1">상품평 대시보드</h1><p>전일 00:00~23:59에 등록된 상품평을 한국시간 기준으로 조회합니다.</p></div>
+      <button type="button" class="secondary" id="export" disabled>엑셀용 CSV</button>
+    </section>
+
+    <section class="filters panel" aria-label="상품평 조회 조건">
+      <div class="period">
+        <div class="dates">
+          <label>시작일<input id="from" type="date" required></label>
+          <label>종료일<input id="to" type="date" required></label>
+        </div>
+        <div class="presets" aria-label="조회기간 빠른 선택">
+          <button type="button" data-period="yesterday">전일</button>
+          <button type="button" data-period="7">최근 7일</button>
+          <button type="button" data-period="30">최근 30일</button>
+          <button type="button" data-period="month">이번 달</button>
+          <button type="button" data-period="last">지난달</button>
+          <button type="button" data-period="all">전체 기간</button>
+        </div>
+      </div>
+      <label>카테고리<select id="category"><option value="">전체 카테고리</option></select></label>
+      <label>상품 검색<input type="search" id="search" placeholder="상품명 또는 상품코드"></label>
+      <p id="period-error" role="alert" hidden>전일까지의 날짜 중 시작일이 종료일보다 앞서거나 같도록 선택해 주세요.</p>
+    </section>
+
+    <section class="kpis" aria-label="기간별 요약">
+      <div class="panel summary"><span>기간 내 등록 상품평</span><strong id="total">—</strong></div>
+      <div class="panel summary"><span>상품평이 달린 상품</span><strong id="skuCount">—</strong></div>
+      <div class="panel summary"><span>상품평 확인 상품</span><strong id="checkedCount">—</strong></div>
+    </section>
+    <p id="data-note" class="sample" aria-live="polite"></p>
+
+    <div class="dashboard">
+      <section class="panel chart" aria-labelledby="category-heading">
+        <div class="panel-head"><h2 id="category-heading">카테고리별 상품평</h2><span id="category-count"></span></div>
+        <div id="category-chart"></div>
+      </section>
+      <section class="panel chart" aria-labelledby="coverage-heading">
+        <div class="panel-head"><h2 id="coverage-heading">홈쇼핑사별 수집 현황</h2><span id="collection-status" role="status"></span></div>
+        <div id="coverage"></div>
+        <p class="coverage-note">공개 페이지에서 등록일을 확인한 상품만 집계합니다. 수집 미확인은 건수를 표시하지 않습니다. 카테고리가 표시되지 않은 상품은 미분류로 합산합니다.</p>
+      </section>
+    </div>
+
+    <section class="panel ranking" aria-labelledby="ranking-heading">
+      <div class="panel-head"><h2 id="ranking-heading">상품평 상위 100개</h2><span id="ranking-count"></span></div>
+      <div id="ranking"></div>
+    </section>
+  </main>
+</body>
+</html>
