@@ -38,6 +38,16 @@ export function readProduct() {
   const fullDate = /\b(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})(?:일)?\b/;
   const dateOnly = /^\s*(?:(?:등록일|작성일|작성일자)\s*:?\s*)?(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})(?:일)?\s*\.?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\s*$/;
   const iso = match => [match[1],match[2].padStart(2,'0'),match[3].padStart(2,'0')].join('-');
+  const gsReviewList = document.querySelector('#reveiw-list');
+  if (gsReviewList) {
+    for (const row of gsReviewList.querySelectorAll(':scope > .review-items')) {
+      const date = row.querySelector('.write-info .date')?.textContent.match(fullDate);
+      const body = row.querySelector('.review-content .review-desc')?.innerText?.trim();
+      const author = row.querySelector('.write-info .writer')?.textContent.trim() ?? '';
+      if (date && body) out.reviews.push({date:iso(date),body,author,source:'visible'});
+    }
+    if (out.reviews.length) return out;
+  }
   const types = value=>[value?.['@type']].flat();
   const productReviews = [product?.review].flat();
   const otherReviews = structured.filter(v=>types(v).includes('Review') &&
@@ -101,6 +111,20 @@ function clickReviewControl(mode) {
     sort:/^(베스트순|추천순|랭킹순|선호도순|인기순|도움순|정렬)$/,
     more:/^(?:(?:전체|상품평|리뷰)\s*)?(?:더\s*보기|더\s*불러오기|다음(?:\s*페이지)?)(?:\s*[+＋>›])?$/,
   };
+  const gsSelector = {
+    tab:'#reviewTab',
+    sort:'#reviewSort1 .current',
+    latest:'label[for="sort1_1"]',
+    more:'#reveiw-list ~ button.more-view, #reveiw-list ~ * button.more-view',
+  };
+  const gsControl = document.querySelector(gsSelector[mode]);
+  if (gsControl?.getClientRects().length &&
+      !gsControl.matches('[disabled],[aria-disabled="true"]') &&
+      getComputedStyle(gsControl).visibility!=='hidden') {
+    gsControl.scrollIntoView({block:'center'});
+    gsControl.click();
+    return true;
+  }
   const nodes = [...document.querySelectorAll('a,button,[role="button"],[role="tab"],[role="option"],label,select,li,span')];
   for (const element of nodes) {
     if (!element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
@@ -113,7 +137,7 @@ function clickReviewControl(mode) {
       element.dispatchEvent(new Event('change',{bubbles:true}));
       return true;
     }
-    const label = (element.innerText || '').replace(/[\uE000-\uF8FF]/g,'').trim();
+    const label = (element.innerText || '').replace(/[\uE000-\uF8FF]/g,'').trim().replace(/^\d+\s*개\s+(?=더\s*보기)/,'');
     const ariaLabel = element.getAttribute('aria-label') || '';
     if (!labels[mode].test(label) && !labels[mode].test(ariaLabel)) continue;
     const container = element.closest('[id*="review" i],[class*="review" i],[id*="reveiw" i],[class*="reveiw" i],[class*="assmt" i]');
@@ -154,7 +178,7 @@ async function inspectProduct(page, link, shop, remember, salt, targetDay) {
   }
   if (!source || link.id && source.id!==link.id)
     throw new Error('공식 상품 주소 확인 실패 (' + (snap.pageTitle || '제목 없음') + ')');
-  for (let attempt=0; attempt<5; attempt++) {
+  for (let attempt=0; attempt<10; attempt++) {
     if (await page.inspect(clickReviewControl,'tab')) break;
     await pause(800);
   }
@@ -169,7 +193,7 @@ async function inspectProduct(page, link, shop, remember, salt, targetDay) {
   for (let step=0; step<maxReviewPages; step++) {
     snap = await page.inspect(readProduct);
     if (step===0 && !snap.reviews.length && !snap.empty) {
-      for (let retry=0; retry<3 && !snap.reviews.length && !snap.empty; retry++) {
+      for (let retry=0; retry<6 && !snap.reviews.length && !snap.empty; retry++) {
         await pause(800);
         snap = await page.inspect(readProduct);
       }
@@ -212,7 +236,11 @@ export async function collect(store, save, report, targetDay) {
       try {
         await page.navigate(shop.home);
         await pause(1700);
-        const discovery = await page.inspect(findPublicLinks);
+        let discovery = await page.inspect(findPublicLinks);
+        for (let retry=0; retry<4 && !discovery.links.length; retry++) {
+          await pause(1200);
+          discovery = await page.inspect(findPublicLinks);
+        }
         for (const url of discovery.links) {
           const link = productLink(url,shop);
           if (link) links.set(link.id,link);
