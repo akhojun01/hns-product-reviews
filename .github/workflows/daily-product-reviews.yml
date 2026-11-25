@@ -1,0 +1,75 @@
+name: Product reviews daily batch
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.mjs'
+      - 'index.html'
+      - 'style.css'
+      - '.github/workflows/daily-product-reviews.yml'
+  workflow_dispatch:
+    inputs:
+      day:
+        description: '한국시간 등록일 YYYY-MM-DD (생략 시 전일)'
+        required: false
+        type: string
+  schedule:
+    - cron: '17 21 * * *'
+
+concurrency:
+  group: product-review-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Collect public reviews for the previous day
+        env:
+          REVIEW_DAY: ${{ inputs.day }}
+        run: |
+          node collect-day.mjs "$REVIEW_DAY"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Save daily product review totals'
+            git push origin HEAD:main
+          fi
+      - uses: actions/configure-pages@v5
+      - name: Prepare public files
+        run: |
+          mkdir -p public
+          cp index.html style.css app.mjs stats.mjs shops.mjs dates.mjs data.json public/
+          touch public/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  publish:
+    needs: collect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
